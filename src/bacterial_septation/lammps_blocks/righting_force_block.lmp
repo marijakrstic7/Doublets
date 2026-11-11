@@ -1,0 +1,10 @@
+{%- if define_variables %}
+variable vDist atom "sqrt(x^2 + z^2)"
+variable vDistNorm atom "ternary(v_vDist>0, 1/v_vDist, 1.0)"
+{% endif -%}
+
+variable vRightingForce atom "{{epsilon}} * (v_vDist + {{delta_r}} - {{r_zero}}) / {{delta_r}}"
+variable vSurfRightingX atom "-v_vRightingForce*x*v_vDistNorm"
+variable vSurfRightingZ atom "-v_vRightingForce*z*v_vDistNorm"
+
+fix fRightingForce {{target_group}} addforce v_vSurfRightingX 0. v_vSurfRightingZ

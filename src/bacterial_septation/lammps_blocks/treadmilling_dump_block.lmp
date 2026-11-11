@@ -1,0 +1,14 @@
+# write chemistry
+## 4 standard reactions, nucleation, denucleation, oligomer on, oligomer off
+## n_mer reactions depending on minimum nmer size
+### 2_mer on, 3_mer off, 4_mer on, 5_mer off, etc.
+### then modified nucleation if modulation is used
+fix fDumpChemistry all ave/time 1 1 {{simulation_parameters.print_steps}} &
+    f_fReact[1] f_fReact[2] f_fReact[3] f_fReact[4] & 
+    {% for i in range(0, (max_nmer-2)*2, 2) -%}
+    f_fReact[{{5+i}}] f_fReact[{{6+i}}] &
+    {% endfor -%}
+{%- if modulation -%} 
+    f_fReact[{{ 5+(max_nmer-2)*2 }}] &
+{% endif -%}
+file reactions.txt

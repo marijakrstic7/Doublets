@@ -1,0 +1,16 @@
+# Surface interactions
+variable vDist atom "sqrt(x^2 + z^2)"
+{%- if dynamic_radius %}
+compute cMeanRad {{target_group}} reduce ave v_vDist
+variable vMeanRad equal "c_cMeanRad" # this allows for combinging an averaged quantity with per-atom vectors
+variable vDistSurf atom "v_vMeanRad - v_vDist"
+{% else %}
+variable vDistSurf atom "{{cylinder_membrane_parameters.cell_radius}} - v_vDist"
+{% endif -%}
+variable vDistNorm atom "ternary(v_vDist>0, 1/v_vDist, 1.0)"
+
+variable vDistSign atom "ternary(v_vDistSurf > 0.0,1.0,-1.0)"
+variable vSurfAttractionX atom "(v_vDistSurf*{{cylinder_membrane_parameters.attraction_epsilon}}*x*v_vDistNorm)"
+variable vSurfAttractionZ atom "(v_vDistSurf*{{cylinder_membrane_parameters.attraction_epsilon}}*z*v_vDistNorm)"
+
+fix fSurfAttraction {{target_group}} addforce v_vSurfAttractionX 0. v_vSurfAttractionZ

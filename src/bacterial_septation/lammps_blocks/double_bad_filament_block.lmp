@@ -1,0 +1,43 @@
+## weights for 1-2, 1-3, 1-4 bonded particles in other neighborlists
+special_bonds lj 1.0 1.0 1.0 # TODO: should these be 0 or 1
+
+bond_style harmonic
+bond_coeff 1 {{filament_parameters.bond_rigidity}} {{filament_parameters.bond_distance}} # bond type, K (energy), r0 (distance)
+bond_coeff 2 {{filament_parameters.nth_neigh_bond_rigidity}} {{filament_parameters.nth_neigh_bond_distance}} # bond type, K (energy), r0 (distance) - nth neigbour bonds, only guide chemistry
+bond_coeff 3 {{filament_parameters.patch_rigidity}} {{filament_parameters.patch_distance}}
+bond_coeff 4 {{filament_parameters.interpatch_bond_rigidity}} {{filament_parameters.interpatch_bond_distance}}
+
+angle_style harmonic # needs PKG_MOLECULE
+angle_coeff 1 0 0 # angle type, K (energy), theta0 (angle)
+angle_coeff 2 {{filament_parameters.nn_angle_rigidity}} {{filament_parameters.nn_equilibrium_angle}} # angle type, K (energy), theta0 (angle) - nearest neighbor
+angle_coeff 3 {{filament_parameters.patch_angle_rigidity}} {{filament_parameters.patch_equilibrium_angle}}
+
+dihedral_style spherical # needs PKG_EXTRA-MOLECULE
+
+# scheme for dihedral coeff spherical
+# dihedral type, n number of functions (integer), 
+#   C (energy)
+#       K_1 (angle multiplier), a_1 (dihedral angle offset), u_1 cos offset
+#       L_1 (angle multiplier), b_1 (angle offset), v_1 cos offset
+#       M_1 (angle multiplier), c_1 (angle offset), w_1 cos offset
+# according to the second example in https://docs.lammps.org/dihedral_spherical.html
+# 
+dihedral_coeff 1 3 &
+    {{filament_parameters.dihedral_rigidity}} &
+        1 {{filament_parameters.equilibrium_dihedral}} 1. &
+        1 90 0. &
+        1 90 0. &
+    {{filament_parameters.angle_rigidity}} &
+        0. 0.00 0. &
+        1  {{filament_parameters.equilibrium_angle}} 1. &
+        0. 0.00 0. &
+    {{filament_parameters.angle_rigidity}} &
+        0. 0.00 0. &
+        0. 0.00 0. &
+        1 {{filament_parameters.equilibrium_angle}} 1.
+
+dihedral_coeff 2 1 &
+    {{filament_parameters.patch_dihedral_rigidity}} &
+        1 {{filament_parameters.patch_equilibrium_dihedral}} 1. &
+        1 90 0. &
+        1 90 0. &

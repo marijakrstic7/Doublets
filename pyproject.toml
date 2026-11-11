@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bacterial_septation"
+requires-python = ">=3.9"
+version = "0.0.1"
+authors = [
+    {name = "Felix Wodaczek"},
+]
+
+[tool.setuptools]
+packages = ["bacterial_septation"]
+package-dir = {"" = "src"}

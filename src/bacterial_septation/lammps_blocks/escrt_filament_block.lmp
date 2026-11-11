@@ -1,0 +1,4 @@
+bond_style harmonic
+{% for ii in range(filament_parameters.bond_lengths | length) -%}
+bond_coeff {{filament_parameters.bond_types[ii]}} {{filament_parameters.bond_rigidities[ii]}} {{filament_parameters.bond_lengths[ii]}}
+{% endfor %}

@@ -1,0 +1,11 @@
+name: bacterial_septation
+channels:
+  - conda-forge
+dependencies:
+  - ase
+  - ipykernel
+  - matplotlib
+  - numpy
+  - pillow
+  - python=3.10
+  - jinja2

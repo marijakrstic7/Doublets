@@ -1,0 +1,265 @@
+## save seed variable to be used by maps
+variable vSeed equal {{simulation_parameters.seed}}
+
+{%- if simulation_parameters.hydrolysis_mode == 'explicit' %}
+## determine whether or not a particle is hydrolyzed based on lifetime and a random number stored within it
+variable vIsHydrolysed atom "(i_creation_steps - ln(1e-12 + d_hydrolysis_rn)*v_thyd) < step"
+variable koff atom "{{treadmilling_parameters.r_off}}*{{simulation_parameters.reaction_time}}"
+{% else %}
+## particles are always hydrolyzed and only koff determines off rate through mean-field hydrolysis
+variable vIsHydrolysed atom "1"
+## vSA: lifetime of particles
+variable vSA atom "(step-i_creation_steps)"
+{%- if treadmilling_parameters.add_depol_modulation == True %}
+variable thyd atom (({{treadmilling_parameters.tau_hyd_modulation}}-{{treadmilling_parameters.tau_hyd}})*c_cPatchNeighbors+{{treadmilling_parameters.tau_hyd}})/${tstep}
+{%- else %}
+variable thyd equal {{treadmilling_parameters.tau_hyd}}/${tstep} # hydrolysis time [simulation steps]
+{%- endif %}
+## vTailsTime: relative to hydrolysis time
+variable vTailsTime atom "v_vSA/v_thyd"
+## kdis: off-rate as mean field probability that particle has already been hydrolyzed.
+variable koff atom "1.0-exp(-v_vTailsTime)"
+{% endif %}
+{%- if treadmilling_parameters.add_pol_modulation == True and treadmilling_parameters.infinite_growth == False and treadmilling_parameters.add_min_treadmilling_profile == False %}
+variable kon atom ({{treadmilling_parameters.r_on_modulation}}-{{treadmilling_parameters.r_on}})*{{simulation_parameters.reaction_time}}*c_cPatchNeighbors+v_konin
+{%- elif treadmilling_parameters.add_pol_modulation == False and treadmilling_parameters.infinite_growth == False and treadmilling_parameters.add_min_treadmilling_profile == False %}
+variable kon atom v_konin
+{%- elif treadmilling_parameters.add_pol_modulation == False and treadmilling_parameters.infinite_growth == True and treadmilling_parameters.add_min_treadmilling_profile == False %}
+## Ferdinand's code that allows infite growth only in the middle of the box -NEEDS FINISHING WITH ALL THE VARIABLES IN THE kon
+## box modulation
+variable  kswitch equal 0.1 ## how fast to switch
+variable rswitch1 equal {{treadmilling_parameters.infinite_growth_box_size}}/2 ## position of switching
+variable rswitch2 equal -{{treadmilling_parameters.infinite_growth_box_size}}/2
+variable s1 atom 1/(1 + exp(v_kswitch*(y - v_rswitch1)))
+variable s2 atom 1/(1 + exp(v_kswitch*(y - v_rswitch2)))
+variable bumpy atom v_s1 * (1 - v_s2)
+variable sx1 atom 1/(1 + exp(v_kswitch*(x - v_rswitch1)))
+variable sx2 atom 1/(1 + exp(v_kswitch*(x - v_rswitch2)))
+variable bumpx atom v_sx1 * (1 - v_sx2)
+variable kon atom v_konin*v_bumpy*v_bumpx
+
+{%- elif treadmilling_parameters.add_pol_modulation == True and treadmilling_parameters.infinite_growth == True and treadmilling_parameters.add_min_treadmilling_profile == False %}
+## Ferdinand's code that allows infite growth only in the middle of the box -NEEDS FINISHING WITH ALL THE VARIABLES IN THE kon
+## box modulation
+variable  kswitch equal 0.1 ## how fast to switch
+variable rswitch1 equal {{treadmilling_parameters.infinite_growth_box_size}}/2 ## position of switching
+variable rswitch2 equal -{{treadmilling_parameters.infinite_growth_box_size}}/2
+variable s1 atom 1/(1 + exp(v_kswitch*(y - v_rswitch1)))
+variable s2 atom 1/(1 + exp(v_kswitch*(y - v_rswitch2)))
+variable bumpy atom v_s1 * (1 - v_s2)
+variable sx1 atom 1/(1 + exp(v_kswitch*(x - v_rswitch1)))
+variable sx2 atom 1/(1 + exp(v_kswitch*(x - v_rswitch2)))
+variable bumpx atom v_sx1 * (1 - v_sx2)
+variable kon atom v_konin+({{treadmilling_parameters.r_on_modulation}}-{{treadmilling_parameters.r_on}})*{{simulation_parameters.reaction_time}}*c_cPatchNeighbors*v_bumpy*v_bumpx
+
+{%- elif treadmilling_parameters.add_pol_modulation == True and treadmilling_parameters.infinite_growth == False and treadmilling_parameters.add_min_treadmilling_profile == True %}
+
+## box modulation - OLD SETUP WITHOUT ALIGNMENT
+# variable  kswitch equal 0.1 ## how fast to switch
+# variable rswitch1 equal {{treadmilling_parameters.treadmilling_profile_width}}/2 ## position of switching
+# variable rswitch2 equal -{{treadmilling_parameters.treadmilling_profile_width}}/2
+# variable s1 atom 1/(1 + exp(v_kswitch*(y - v_rswitch1)))
+# variable s2 atom 1/(1 + exp(v_kswitch*(y - v_rswitch2)))
+# variable bumpy atom v_s1 * (1 - v_s2)
+# variable kon atom (({{treadmilling_parameters.r_on_modulation}}-{{treadmilling_parameters.r_on}})*{{simulation_parameters.reaction_time}}*c_cPatchNeighbors+v_konin)*v_bumpy
+
+variable kon atom (({{treadmilling_parameters.r_on_modulation}}-{{treadmilling_parameters.r_on}})*{{simulation_parameters.reaction_time}}*c_cPatchNeighbors+v_konin)*exp(-y*y/100)
+
+{%- if treadmilling_parameters.add_alignment_force == True %}
+##Chris' alignment force
+variable            fCurv equal 5                                # magnitude of the curvature force [kT/sigma]
+
+variable            vMaskHeadType atom "type==3"
+group               HeadMons dynamic all var vMaskHeadType every 1
+variable            vMaskTailType atom "type==2"
+group               TailMons dynamic all var vMaskTailType every 1
+variable            vMaskHTType atom "type==2 || type==3"
+group               HTMons dynamic all var vMaskHTType every 1
+variable            vMaskAlive atom "type==1 || type==2 || type==3"
+group               alive dynamic all var vMaskAlive every 1
+
+compute             cFrag all fragment/atom single no               #assign same fragment id to all connected atoms, 0 to non- connected atoms
+compute             cMol all chunk/atom c_cFrag
+compute             cCMH HeadMons com/chunk cMol
+compute             cCMT TailMons com/chunk cMol
+compute             cFilH all chunk/spread/atom cMol c_cCMH[*]
+compute             cFilT all chunk/spread/atom cMol c_cCMT[*]
+variable            vdxHT atom c_cFilH[1]-c_cFilT[1]
+variable            vdyHT atom c_cFilH[2]-c_cFilT[2]
+variable            condghosts atom "type == 12 || type == 13"          #avoid division by 0 cause non bonded atoms have no fragment/atom attribute
+variable            vRHT atom sqrt(v_vdxHT*v_vdxHT+v_vdyHT*v_vdyHT)+v_condghosts
+variable            vcosHT atom v_vdxHT/v_vRHT
+variable            vsinHT atom v_vdyHT/v_vRHT
+variable            conddx0 atom "v_vdxHT == 0"
+variable            dxAbs atom abs(v_vdxHT)+v_conddx0
+variable            dxSign atom v_vdxHT/v_dxAbs
+
+variable            fxField atom v_fCurv*(1.0-v_vcosHT)*v_vsinHT*v_vsinHT*v_dxSign
+variable            fyField atom v_fCurv*(1.0-v_vcosHT)*v_vsinHT*-1.0*v_vcosHT*v_dxSign
+variable            mfxField atom -1.0*v_fxField
+variable            mfyField atom -1.0*v_fyField
+
+fix                 fcurvH HeadMons addforce v_fxField v_fyField 0
+fix                 fcurvT TailMons addforce v_mfxField v_mfyField 0
+{%- endif %}
+
+
+{%- elif treadmilling_parameters.add_pol_modulation == False and treadmilling_parameters.infinite_growth == False and treadmilling_parameters.add_min_treadmilling_profile == True %}
+
+## box modulation
+# variable  kswitch equal 0.1 ## how fast to switch
+# variable rswitch1 equal {{treadmilling_parameters.treadmilling_profile_width}}/2 ## position of switching
+# variable rswitch2 equal -{{treadmilling_parameters.treadmilling_profile_width}}/2
+# variable s1 atom 1/(1 + exp(v_kswitch*(y - v_rswitch1)))
+# variable s2 atom 1/(1 + exp(v_kswitch*(y - v_rswitch2)))
+# variable bumpy atom v_s1 * (1 - v_s2)
+# variable kon atom v_konin*v_bumpy
+
+variable kon atom v_konin*exp(-y*y/100)
+
+{%- if treadmilling_parameters.add_alignment_force == True %}
+##Chris' alignment force
+variable            fCurv equal 5                                # magnitude of the curvature force [kT/sigma]
+
+variable            vMaskHeadType atom "type==3"
+group               HeadMons dynamic all var vMaskHeadType every 1
+variable            vMaskTailType atom "type==2"
+group               TailMons dynamic all var vMaskTailType every 1
+variable            vMaskHTType atom "type==2 || type==3"
+group               HTMons dynamic all var vMaskHTType every 1
+variable            vMaskAlive atom "type==1 || type==2 || type==3"
+group               alive dynamic all var vMaskAlive every 1
+
+compute             cFrag all fragment/atom single no               #assign same fragment id to all connected atoms, 0 to non- connected atoms
+compute             cMol all chunk/atom c_cFrag
+compute             cCMH HeadMons com/chunk cMol
+compute             cCMT TailMons com/chunk cMol
+compute             cFilH all chunk/spread/atom cMol c_cCMH[*]
+compute             cFilT all chunk/spread/atom cMol c_cCMT[*]
+variable            vdxHT atom c_cFilH[1]-c_cFilT[1]
+variable            vdyHT atom c_cFilH[2]-c_cFilT[2]
+variable            condghosts atom "type == 12 || type == 13"          #avoid division by 0 cause non bonded atoms have no fragment/atom attribute
+variable            vRHT atom sqrt(v_vdxHT*v_vdxHT+v_vdyHT*v_vdyHT)+v_condghosts
+variable            vcosHT atom v_vdxHT/v_vRHT
+variable            vsinHT atom v_vdyHT/v_vRHT
+variable            conddx0 atom "v_vdxHT == 0"
+variable            dxAbs atom abs(v_vdxHT)+v_conddx0
+variable            dxSign atom v_vdxHT/v_dxAbs
+
+variable            fxField atom v_fCurv*(1.0-v_vcosHT)*v_vsinHT*v_vsinHT*v_dxSign
+variable            fyField atom v_fCurv*(1.0-v_vcosHT)*v_vsinHT*-1.0*v_vcosHT*v_dxSign
+variable            mfxField atom -1.0*v_fxField
+variable            mfyField atom -1.0*v_fyField
+
+fix                 fcurvH HeadMons addforce v_fxField v_fyField 0
+fix                 fcurvT TailMons addforce v_mfxField v_mfyField 0
+{%- endif %}
+
+
+{%- endif %}
+
+molecule mPreOn {{treadmilling_parameters.template_path}}OligomerOn_pre.txt
+molecule mPostOn {{treadmilling_parameters.template_path}}OligomerOn_post.txt
+molecule mPreOff {{treadmilling_parameters.template_path}}OligomerOff_pre.txt
+molecule mPostOff {{treadmilling_parameters.template_path}}OligomerOff_post.txt
+
+{%- if treadmilling_parameters.add_two_oligomer_templates == True %}
+molecule mPreOn2 {{treadmilling_parameters.template_path}}OligomerOn2_pre.txt
+molecule mPostOn2 {{treadmilling_parameters.template_path}}OligomerOn2_post.txt
+molecule mPreOff2 {{treadmilling_parameters.template_path}}OligomerOff2_pre.txt
+molecule mPostOff2 {{treadmilling_parameters.template_path}}OligomerOff2_post.txt
+{%- endif %}
+
+molecule mPreNucleation {{treadmilling_parameters.template_path}}Nucleation_pre.txt
+molecule mPostNucleation {{treadmilling_parameters.template_path}}Nucleation_post.txt
+molecule mPreDenucleation {{treadmilling_parameters.template_path}}Denucleation_pre.txt
+molecule mPostDenucleation {{treadmilling_parameters.template_path}}Denucleation_post.txt
+{% for i in range(2, max_nmer) -%}
+molecule mPre{{i}}merOn {{treadmilling_parameters.template_path}}{{i}}mer_on_pre.txt
+molecule mPost{{i}}merOn {{treadmilling_parameters.template_path}}{{i}}mer_on_post.txt
+molecule mPre{{i+1}}merOff {{treadmilling_parameters.template_path}}{{i+1}}mer_off_pre.txt
+molecule mPost{{i+1}}merOff {{treadmilling_parameters.template_path}}{{i+1}}mer_off_post.txt
+{% endfor %}
+
+{%- if treadmilling_parameters.add_sec_nuc_modulation == True -%}
+
+molecule mPreSecNuc {{treadmilling_parameters.template_path}}SecondaryNuc_pre.txt
+molecule mPostSecNuc {{treadmilling_parameters.template_path}}SecondaryNuc_post.txt
+
+{%- endif %}
+
+## needs PKG_REACTION
+## stabilization yes NotReacting 0.1: stabilize, create group called "NotReacting" with everything that's not stabilised, xmax
+### xmax: max distance particle can move in one timestep of stabilising nve integrator
+## react ID target_group Nevery r_min r_max mol_pre mol_post map_file prob seed
+## modify create overlap stops stuff from happening if too close to existing particles
+## modify create fit 1: only use particles that are part of molecule-fragment-ID 1
+
+fix fReact all bond/react stabilization yes NotReacting 0.1 reset_mol_ids molmap lifetime {{lifetime_arg}} &
+    react rNucleation all {{simulation_parameters.nucleation_steps}} & 
+        0 1.5 mPreNucleation mPostNucleation {{treadmilling_parameters.template_path}}Nucleation_map.txt &
+        prob {{ 'v_pNucNormal' if modulation else '1' }} {{simulation_parameters.seed}} stabilize_steps {{stabilize_steps}} &
+        {%- if nuctype == 'plane' %}
+        modify_create nuc yes & 
+        {% elif nuctype == 'cylinder' %}
+        modify_create nuc cylinder {{membrane_parameters.cell_radius}} &
+        {% elif nuctype == 'double_cylinder_mod' %}
+        modify_create nuc cylinder mod {{treadmilling_parameters.profile_width}} {{membrane_parameters.cell_radius}} &
+        {% endif -%}
+        fit all modify_create overlap 0.9 &
+        {%- if nooverlap is not none %}
+        modify_create nooverlap {{nooverlap|length}} {{nooverlap|join(' ')}} &
+        {% endif -%}
+    react rDenucleation all {{simulation_parameters.reaction_steps}} & 
+        {{xmin_off}} {{xmax_off}} mPreDenucleation mPostDenucleation {{treadmilling_parameters.template_path}}Denucleation_map.txt prob 1 {{simulation_parameters.seed}} &
+    react rOn all {{simulation_parameters.reaction_steps}} & 
+        {{xmin_on}} {{xmax_on}} mPreOn mPostOn {{treadmilling_parameters.template_path}}OligomerOn_map.txt prob 1 {{simulation_parameters.seed}} &
+        modify_create overlap 0.9 fit 2 stabilize_steps {{stabilize_steps}} &
+        {%- if nooverlap is not none %}
+        modify_create nooverlap {{nooverlap|length}} {{nooverlap|join(' ')}} &
+        {% endif -%}
+    react rOff all {{simulation_parameters.reaction_steps}} & 
+        {{xmin_off}} {{xmax_off}} mPreOff mPostOff {{treadmilling_parameters.template_path}}OligomerOff_map.txt prob 1 {{simulation_parameters.seed}} stabilize_steps {{stabilize_steps}} &
+    {% if treadmilling_parameters.add_two_oligomer_templates == True %}
+    react rOn2 all {{simulation_parameters.reaction_steps}} & 
+        {{xmin_on}} {{xmax_on}} mPreOn2 mPostOn2 {{treadmilling_parameters.template_path}}OligomerOn2_map.txt prob 1 {{simulation_parameters.seed}} &
+        modify_create overlap 0.9 fit 2 stabilize_steps {{stabilize_steps}} &
+        {%- if nooverlap is not none %}
+        modify_create nooverlap {{nooverlap|length}} {{nooverlap|join(' ')}} &
+        {% endif -%}
+    react rOff2 all {{simulation_parameters.reaction_steps}} & 
+        {{xmin_off}} {{xmax_off}} mPreOff2 mPostOff2 {{treadmilling_parameters.template_path}}OligomerOff2_map.txt prob 1 {{simulation_parameters.seed}} stabilize_steps {{stabilize_steps}} & 
+    {% endif -%}
+    {% for i in range(2, max_nmer) -%}
+    react rOn{{i}}mer all {{simulation_parameters.reaction_steps}} & 
+        {{xmin_on}} {{xmax_on}} mPre{{i}}merOn mPost{{i}}merOn {{treadmilling_parameters.template_path}}{{i}}mer_on_map.txt prob 1 {{simulation_parameters.seed}} modify_create overlap 0.9 fit 2 stabilize_steps {{stabilize_steps}} &
+        {%- if nooverlap is not none %}
+        modify_create nooverlap {{nooverlap|length}} {{nooverlap|join(' ')}} &
+        {% endif -%}
+    react rOff{{i+1}}mer all {{simulation_parameters.reaction_steps}} & 
+        {{xmin_off}} {{xmax_off}} mPre{{i+1}}merOff mPost{{i+1}}merOff {{treadmilling_parameters.template_path}}{{i+1}}mer_off_map.txt prob 1 {{simulation_parameters.seed}} stabilize_steps {{stabilize_steps}} &
+    {% endfor %}
+    {%- if treadmilling_parameters.add_sec_nuc_modulation == True -%}
+    react rSecNuc all {{simulation_parameters.nucleation_steps}} & 
+        {{xmin_on}} {{xmax_on}} mPreSecNuc mPostSecNuc {{treadmilling_parameters.template_path}}SecondaryNuc_map.txt prob {{treadmilling_parameters.prob_secnuc}} {{simulation_parameters.seed}} &
+        modify_create overlap 0.9 fit 2 stabilize_steps {{stabilize_steps}} &
+        {%- if nooverlap is not none %}
+        modify_create nooverlap {{nooverlap|length}} {{nooverlap|join(' ')}} &
+        {% endif -%}
+    {% endif -%}
+    {%- if modulation -%}
+    react rNucleationExp all {{simulation_parameters.nucleation_steps}} &
+        0 1.5 mPreNucleation mPostNucleation {{treadmilling_parameters.template_path}}Nucleation_map.txt & 
+        prob v_pNucExp {{simulation_parameters.seed}} stabilize_steps {{stabilize_steps}} &
+        {%- if nuctype == 'plane' %}
+        modify_create nuc mod {{treadmilling_parameters.profile_width}} &
+        {% elif nuctype == 'cylinder' %}
+        modify_create nuc cylinder mod {{treadmilling_parameters.profile_width}} {{membrane_parameters.cell_radius}} &
+        {% elif nuctype == 'double_cylinder_mod' %}
+        modify_create nuc cylinder mod {{treadmilling_parameters.profile_width_post}} {{membrane_parameters.cell_radius}} &
+        {% endif -%}
+        fit all modify_create overlap 0.9 &
+        {%- if nooverlap is not none %}
+        modify_create nooverlap {{nooverlap|length}} {{nooverlap|join(' ')}} &
+        {% endif -%}
+    {% endif -%}

@@ -1,0 +1,23 @@
+# write bonds
+{%- if write_bonds %}
+compute cBondPartners all property/local batom1 batom2 btype
+compute cBondVectors all bond/local dist dx dy dz
+dump dBond all {{dump_type}} {{simulation_parameters.print_steps}} {{'bonds_constriction'+filenameextra+fsuffix}} c_cBondPartners[*] c_cBondVectors[*]
+{% endif -%}
+
+{%- if write_angles %}
+# write angles
+compute cAnglePartners all property/local aatom1 aatom2 aatom3 atype
+compute cAngle all angle/local eng theta
+dump dAngle all {{dump_type}} {{simulation_parameters.print_steps}} {{'angles_constriction'+filenameextra+fsuffix}} c_cAnglePartners[*] c_cAngle[*]
+{% endif -%}
+
+{%- if write_dihedrals %}
+# write dihedrals
+variable p internal 0.0
+variable VCos equal 1-cos(v_p-20)
+
+compute cDihedralPartners all property/local datom1 datom2 datom3 datom4 dtype
+compute cDihedral all dihedral/local phi v_VCos set phi p
+dump dDihedral all {{dump_type}} {{simulation_parameters.print_steps}} {{'dihedrals_constriction'+filenameextra+fsuffix}} c_cDihedralPartners[*] c_cDihedral[*] # TODO: switch to binary
+{% endif -%}

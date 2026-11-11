@@ -1,0 +1,141 @@
+log log.txt
+units lj
+atom_style molecular # needs PKG_MOLECULE
+dimension 2
+boundary p p p
+restart 1000000 restart_constriction.*.bin.gz
+
+processors * * 1
+
+read_restart restart.{{simulation_parameters.max_restart_number}}.bin.gz
+
+# General settings
+variable tstep equal {{simulation_parameters.timestep}} # simulation timestep size [seconds]
+
+variable konin atom {{treadmilling_parameters.r_on}}*{{simulation_parameters.reaction_time}} # growth probability
+
+variable thyd equal {{treadmilling_parameters.tau_hyd}}/${tstep} # hydrolysis time [simulation steps] - for explicit hydrolysis
+{%- if treadmilling_parameters.add_min_treadmilling_profile == True %}
+{% if treadmilling_parameters.vary_nucleation == True %}
+
+compute typevecNuc all count/type atom 
+variable mainFilAtomsNumNuc equal c_typevecNuc[1]+c_typevecNuc[2]+c_typevecNuc[3]
+variable FilAtomsNumAtomNuc equal v_mainFilAtomsNumNuc
+
+variable maxatoms equal {{treadmilling_parameters.max_atoms}} # maximum number of atoms allowed in the system
+
+variable knucin atom {{treadmilling_parameters.r_nuc}}*{{simulation_parameters.nucleation_time}}*(1-v_FilAtomsNumAtomNuc/v_maxatoms) # nucleation probability
+variable knuc atom v_knucin*exp(-y*y/400)
+{% else %}
+
+variable knucin atom {{treadmilling_parameters.r_nuc}}*{{simulation_parameters.nucleation_time}} # nucleation probability
+variable knuc atom v_knucin*exp(-y*y/400)
+{%- endif %}
+{%- else %}
+variable knuc atom {{treadmilling_parameters.r_nuc}}*{{simulation_parameters.nucleation_time}} # nucleation probability
+#variable thyd equal {{treadmilling_parameters.tau_hyd}}/${tstep} # hydrolysis time [simulation steps]
+{%- endif %}
+
+# read_data initial_state.lmpdat &
+#     extra/atom/types 1 &
+#     extra/bond/per/atom 5 extra/angle/per/atom 5 &
+#     extra/special/per/atom 20 # manually changed first and last atoms
+
+mass * {{filament_parameters.mass}} # atom-type mass
+timestep ${tstep}
+
+{{filament_block.write()}} #bond and angle styles
+
+## Particle repulsion
+### pair style zero only sets neighborlist cutoffs to 1.5
+### pair style cosine/squared strength potential_offset cutoff
+### mind that potential minimum is NOT force minimum here
+### wca is Weeks-Chandler-Andersen, makes this purely repulsive if cutoff is set to potential_offset
+pair_style          hybrid/overlay zero 4. cosine/squared 4.
+pair_coeff          * * cosine/squared 0.00 1.00 1.10
+pair_coeff          * * zero 1.50
+
+# repulsion between main filament beads
+pair_coeff 1*3 1*3 cosine/squared 1.00 1.00 1.00 wca
+
+{%- if treadmilling_parameters.are_patches_interacting == True %}
+# make attraction between patches
+
+#setup for parallel filaments
+#pair_coeff 6 9 cosine/squared 10 0.1 0.4
+#pair_coeff 9*11 9*11 cosine/squared 5 0.1 0.1 wca
+
+#setup for antiparallel filaments
+pair_coeff 6 6 cosine/squared 10 0.1 0.4
+pair_coeff 9 9 cosine/squared 5 0.1 0.4 #was 5 and cutoff 0.4
+#this interaction was for antiparallel fils with repulsive pink beads
+#pair_coeff 9*11 9*11 cosine/squared 5 0.1 0.1 wca
+
+
+#addition for crosslinking like interaction - both sides sticky to everything
+#pair_coeff 6 9 cosine/squared 5 0.1 0.4 
+
+#setup for antiparallel filaments and parallel filaments, and both sides sticky
+pair_coeff 1*3 9*11 cosine/squared 1.00 0.5 0.5 wca
+{%- else %}
+#setup for both antiparallel and parallel filaments
+pair_coeff 9*11 9*11 cosine/squared 5 0.1 0.1 wca
+pair_coeff 1*3 9*11 cosine/squared 1.00 0.5 0.5 wca
+# 9 9 interaction used to have wca
+{%- endif %}
+
+comm_modify cutoff 8.
+
+variable vIsMainAtom atom "type == 1 || type == 4 || type == 7"
+group gMainAtoms dynamic all var vIsMainAtom every 1
+
+variable vIsMemTether atom "type == 2 || type == 5 || type == 8"
+group gMemTether dynamic all var vIsMemTether every 1
+
+variable vIsAttractorAtom atom "type == 3 || type == 6 || type == 9"
+# group gAttractorAtoms dynamic all var vIsAttractorAtom every 1
+
+#track interacting patches
+compute cPatchNeighbors all coord/atom cutoff 0.4 6
+
+#track interacting patches
+compute cPatchNeighbors2 all coord/atom cutoff 0.4 9
+
+variable neigh6 atom c_cPatchNeighbors # number of 6 neighbors for each atom
+variable neigh9 atom c_cPatchNeighbors2 # number of 9 neighbors for each atom
+
+#track main filament neighbors for constraint in the on files that makes sure the 11->9 type switching bead doesnt overlap with 1*3 causing explosions
+compute cMainFilamentAtoms all coord/atom cutoff 1.00 1*3
+variable vMainFilamentAtoms atom c_cMainFilamentAtoms
+
+variable expfactor atom exp(-y*y/400) # exponential factor for modulation of kon
+
+# Define chemistry
+{{treadmilling_block.write()}}
+
+# variable vIntegrate atom "gmask(NotReacting_REACT) && (v_vIsMainAtom || v_vIsMemTether || v_vIsAttractorAtom)"
+# group gIntegrate dynamic all var vIntegrate every 1
+
+variable vIntegrate atom "type < 12"
+group gIntegrate dynamic all var vIntegrate every 1
+
+fix constrict_box all deform 1 x final -1 1 
+
+# add thermostat (needs to be after chemistry)
+fix fLangevin all langevin 1.0 1.0 {{simulation_parameters.damp}} {{simulation_parameters.seed}} # Tstart, Tstop, damp, seed
+## set NVE for all particles not involved in reactions
+### the NotReacting group is created in the reaction fix
+### _the REACT suffix is added by bond/react if the group was not previously defined
+fix fNVE gIntegrate nve
+
+#intergrate in 2d only
+fix 2dall all enforce2d
+
+# Outputs
+## general info
+{{system_dump_block.write()}}
+
+## filament info
+{{bad_filament_dump_block.write()}}
+
+run {{simulation_parameters.total_steps}}

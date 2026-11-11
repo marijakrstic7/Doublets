@@ -1,0 +1,13 @@
+## weights for 1-2, 1-3, 1-4 bonded particles in other neighborlists
+special_bonds lj 0.0 0.0 0.0 # TODO: should these be 0 or 1
+
+bond_style harmonic
+bond_coeff 1 {{filament_parameters.bond_rigidity}} {{filament_parameters.bond_distance}} # bond type, K (energy), r0 (distance)
+bond_coeff 2 {{filament_parameters.nth_neigh_bond_rigidity}} {{filament_parameters.nth_neigh_bond_distance}} # bond type, K (energy), r0 (distance) - nth neigbour bonds, only guide chemistry
+bond_coeff 3 {{filament_parameters.patch_rigidity}} {{filament_parameters.patch_distance}}
+bond_coeff 4 {{filament_parameters.interpatch_bond_rigidity}} {{filament_parameters.interpatch_bond_distance}}
+
+angle_style harmonic # needs PKG_MOLECULE
+angle_coeff 1 0 0 # angle type, K (energy), theta0 (angle)
+angle_coeff 2 {{filament_parameters.nn_angle_rigidity}} {{filament_parameters.nn_equilibrium_angle}} # angle type, K (energy), theta0 (angle) - nearest neighbor
+angle_coeff 3 {{filament_parameters.patch_angle_rigidity}} {{filament_parameters.patch_equilibrium_angle}}

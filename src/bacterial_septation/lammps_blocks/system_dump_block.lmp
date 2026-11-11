@@ -1,0 +1,10 @@
+# write positions to binary file every n timesteps
+{% if dump_ellipsoids -%}
+compute cEllipsoid all property/atom shapex shapey shapez quatw quati quatj quatk
+{% endif -%}
+dump dCoords all {{dump_type}} {{simulation_parameters.print_steps}} {{filename+fsuffix}} id mol type x y z {{extra_dump}} # needs PKG_COMPRESS
+
+# write energy to file every n timesteps
+thermo {{simulation_parameters.print_steps}}
+thermo_style custom step time temp etotal ebond eangle edihed {{extra_thermo}}
+thermo_modify flush yes

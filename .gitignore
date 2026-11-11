@@ -1,0 +1,41 @@
+# lammps binaries
+lmp
+lmp_serial
+
+# python binaries
+__pycache__*
+*.pyc
+*.egg-info
+**/.ipynb_checkpoints/**
+
+# images and pdfs
+*.png
+*.pdf
+*.jpeg
+*.gif
+
+# binaries and data files
+*.gz
+*.dump
+*.tar.gz
+*.data
+*.dat
+*.bin
+*.xyz
+*log.txt
+*log.lammps
+*.lmpdat
+experiments/**/*.txt
+experiments/**/*.log
+experiments/**/*input.lmp
+experiments/**/*parameters.json
+experiments/**/input*.lmp
+experiments/**/parameters*.json
+experiments/**/*.pickle
+experiments/**/*.pkl
+
+# bash and analysis files
+*.sh
+*.csv
+*.npy
+

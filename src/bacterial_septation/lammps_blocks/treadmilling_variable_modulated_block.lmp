@@ -1,0 +1,18 @@
+variable modtime equal {{treadmilling_parameters.switch_time}} # modulation time [tau]
+variable condmod equal "time > v_modtime" # can we start modulation
+
+variable konin atom "&
+{%- if initial_profile == "uniform" %}
+    {{treadmilling_parameters.r_on}}*{{simulation_parameters.reaction_time}}*(1-v_condmod)+ &
+{% elif initial_profile == "gaussian" %}
+    {{treadmilling_parameters.r_on}}*{{simulation_parameters.reaction_time}}*exp(-y*y/{{treadmilling_parameters.profile_width**2}})*(1-v_condmod)+ & 
+{% endif -%}
+    {{treadmilling_parameters.r_on_post}}*{{simulation_parameters.reaction_time}}*exp(-y*y/{{treadmilling_parameters.profile_width_post**2}})*v_condmod"
+# nucleation probability
+variable knuc atom "&
+    {{treadmilling_parameters.r_nuc}}*{{simulation_parameters.nucleation_time}}*(1-v_condmod)+ &
+    {{treadmilling_parameters.r_nuc_post}}*{{simulation_parameters.nucleation_time}}*v_condmod"
+variable thyd equal {{treadmilling_parameters.tau_hyd}}/{{simulation_parameters.timestep}} # hydrolysis time [simulation steps]
+
+variable pNucNormal equal (1-v_condmod)
+variable pNucExp equal v_condmod
